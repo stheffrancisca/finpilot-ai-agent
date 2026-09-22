@@ -1,3 +1,5 @@
+import pandas as pd
+
 from app.tools.financial_metrics import (
     load_transactions,
     calculate_total_income,
@@ -10,9 +12,7 @@ from app.tools.financial_metrics import (
 FILEPATH = "data/sample_transactions.csv"
 
 
-def get_financial_summary() -> dict:
-    """Retorna um resumo financeiro consolidado do usuário."""
-
+def get_financial_summary():
     df = load_transactions(FILEPATH)
 
     income = calculate_total_income(df)
@@ -29,9 +29,7 @@ def get_financial_summary() -> dict:
     }
 
 
-def get_expense_by_category(category: str) -> dict:
-    """Retorna o total gasto em uma categoria específica."""
-
+def get_expense_by_category(category: str):
     df = load_transactions(FILEPATH)
 
     categories = expenses_by_category(df)
@@ -39,9 +37,7 @@ def get_expense_by_category(category: str) -> dict:
     normalized_category = category.strip().lower()
 
     for category_name, value in categories.items():
-
         if category_name.lower() == normalized_category:
-
             return {
                 "category": category_name,
                 "amount": round(float(value), 2),
@@ -55,9 +51,7 @@ def get_expense_by_category(category: str) -> dict:
     }
 
 
-def get_top_expense_category() -> dict:
-    """Retorna a categoria com maior valor de despesas."""
-
+def get_top_expense_category():
     df = load_transactions(FILEPATH)
 
     categories = expenses_by_category(df)
@@ -77,9 +71,7 @@ def get_top_expense_category() -> dict:
     }
 
 
-def calculate_purchase_impact(purchase_amount: float) -> dict:
-    """Simula o impacto financeiro de uma compra."""
-
+def calculate_purchase_impact(purchase_amount: float):
     df = load_transactions(FILEPATH)
 
     safe_data = calculate_safe_spend(df)
@@ -130,4 +122,153 @@ def calculate_purchase_impact(purchase_amount: float) -> dict:
             2
         ),
         "risk": risk,
+    }
+
+
+def detect_recurring_expenses():
+    df = load_transactions(FILEPATH)
+
+    expenses = df[
+        df["type"] == "saida"
+    ].copy()
+
+    recurring = (
+        expenses
+        .groupby(
+            [
+                "description",
+                "category"
+            ]
+        )["amount"]
+        .agg(
+            [
+                "count",
+                "sum",
+                "mean"
+            ]
+        )
+        .reset_index()
+    )
+
+    recurring = recurring[
+        recurring["count"] >= 2
+    ].copy()
+
+    recurring = recurring.sort_values(
+        by="sum",
+        ascending=False
+    )
+
+    results = []
+
+    for _, row in recurring.iterrows():
+        results.append(
+            {
+                "description": row["description"],
+                "category": row["category"],
+                "occurrences": int(
+                    row["count"]
+                ),
+                "total_amount": round(
+                    float(row["sum"]),
+                    2
+                ),
+                "average_amount": round(
+                    float(row["mean"]),
+                    2
+                ),
+            }
+        )
+
+    return results
+
+
+def forecast_month_end_balance():
+    df = load_transactions(FILEPATH)
+
+    df["date"] = pd.to_datetime(df["date"])
+
+    expenses = df[
+        df["type"] == "saida"
+    ].copy()
+
+    income = df[
+        df["type"] == "entrada"
+    ]["amount"].sum()
+
+    total_expenses = expenses["amount"].sum()
+
+    current_balance = (
+        income - total_expenses
+    )
+
+    if expenses.empty:
+        return {
+            "current_balance": round(
+                float(current_balance),
+                2
+            ),
+            "average_daily_expense": 0.0,
+            "days_observed": 0,
+            "days_remaining": 0,
+            "projected_remaining_expenses": 0.0,
+            "projected_month_end_balance": round(
+                float(current_balance),
+                2
+            ),
+        }
+
+    first_date = df["date"].min()
+    last_date = df["date"].max()
+
+    days_observed = (
+        last_date - first_date
+    ).days + 1
+
+    average_daily_expense = (
+        total_expenses / days_observed
+    )
+
+    month_end = (
+        last_date
+        + pd.offsets.MonthEnd(0)
+    )
+
+    days_remaining = (
+        month_end - last_date
+    ).days
+
+    projected_remaining_expenses = (
+        average_daily_expense
+        * days_remaining
+    )
+
+    projected_month_end_balance = (
+        current_balance
+        - projected_remaining_expenses
+    )
+
+    return {
+        "current_balance": round(
+            float(current_balance),
+            2
+        ),
+        "average_daily_expense": round(
+            float(average_daily_expense),
+            2
+        ),
+        "days_observed": int(
+            days_observed
+        ),
+        "days_remaining": int(
+            days_remaining
+        ),
+        "projected_remaining_expenses": round(
+            float(projected_remaining_expenses),
+            2
+        ),
+        "projected_month_end_balance": round(
+            float(projected_month_end_balance),
+            2
+        ),
     }
