@@ -1,7 +1,6 @@
 import pandas as pd
 
 from app.tools.financial_metrics import (
-    load_transactions,
     calculate_total_income,
     calculate_total_expenses,
     calculate_balance,
@@ -9,12 +8,12 @@ from app.tools.financial_metrics import (
     calculate_safe_spend,
 )
 
-FILEPATH = "data/sample_transactions.csv"
 
+# =========================================================
+# RESUMO FINANCEIRO
+# =========================================================
 
-def get_financial_summary():
-    df = load_transactions(FILEPATH)
-
+def get_financial_summary(df):
     income = calculate_total_income(df)
     expenses = calculate_total_expenses(df)
     balance = calculate_balance(df)
@@ -29,14 +28,17 @@ def get_financial_summary():
     }
 
 
-def get_expense_by_category(category: str):
-    df = load_transactions(FILEPATH)
+# =========================================================
+# DESPESA POR CATEGORIA
+# =========================================================
 
+def get_expense_by_category(df, category: str):
     categories = expenses_by_category(df)
 
     normalized_category = category.strip().lower()
 
     for category_name, value in categories.items():
+
         if category_name.lower() == normalized_category:
             return {
                 "category": category_name,
@@ -51,9 +53,11 @@ def get_expense_by_category(category: str):
     }
 
 
-def get_top_expense_category():
-    df = load_transactions(FILEPATH)
+# =========================================================
+# MAIOR CATEGORIA
+# =========================================================
 
+def get_top_expense_category(df):
     categories = expenses_by_category(df)
 
     if categories.empty:
@@ -71,9 +75,11 @@ def get_top_expense_category():
     }
 
 
-def calculate_purchase_impact(purchase_amount: float):
-    df = load_transactions(FILEPATH)
+# =========================================================
+# IMPACTO DE UMA COMPRA
+# =========================================================
 
+def calculate_purchase_impact(df, purchase_amount: float):
     safe_data = calculate_safe_spend(df)
 
     purchase_amount = float(purchase_amount)
@@ -93,8 +99,10 @@ def calculate_purchase_impact(purchase_amount: float):
 
     if purchase_amount > safe_spend:
         risk = "alto"
+
     elif usage_percentage >= 75:
         risk = "moderado"
+
     else:
         risk = "baixo"
 
@@ -104,11 +112,26 @@ def calculate_purchase_impact(purchase_amount: float):
     )
 
     return {
-        "purchase_amount": round(purchase_amount, 2),
-        "current_balance": round(balance, 2),
-        "reserve": round(reserve, 2),
-        "safe_spend": round(safe_spend, 2),
-        "remaining_balance": round(remaining_balance, 2),
+        "purchase_amount": round(
+            purchase_amount,
+            2
+        ),
+        "current_balance": round(
+            balance,
+            2
+        ),
+        "reserve": round(
+            reserve,
+            2
+        ),
+        "safe_spend": round(
+            safe_spend,
+            2
+        ),
+        "remaining_balance": round(
+            remaining_balance,
+            2
+        ),
         "remaining_safe_spend": round(
             remaining_safe_spend,
             2
@@ -125,12 +148,17 @@ def calculate_purchase_impact(purchase_amount: float):
     }
 
 
-def detect_recurring_expenses():
-    df = load_transactions(FILEPATH)
+# =========================================================
+# GASTOS RECORRENTES
+# =========================================================
 
+def detect_recurring_expenses(df):
     expenses = df[
         df["type"] == "saida"
     ].copy()
+
+    if expenses.empty:
+        return []
 
     recurring = (
         expenses
@@ -162,6 +190,7 @@ def detect_recurring_expenses():
     results = []
 
     for _, row in recurring.iterrows():
+
         results.append(
             {
                 "description": row["description"],
@@ -183,17 +212,23 @@ def detect_recurring_expenses():
     return results
 
 
-def forecast_month_end_balance():
-    df = load_transactions(FILEPATH)
+# =========================================================
+# FORECAST
+# =========================================================
 
-    df["date"] = pd.to_datetime(df["date"])
+def forecast_month_end_balance(df):
+    working_df = df.copy()
 
-    expenses = df[
-        df["type"] == "saida"
+    working_df["date"] = pd.to_datetime(
+        working_df["date"]
+    )
+
+    expenses = working_df[
+        working_df["type"] == "saida"
     ].copy()
 
-    income = df[
-        df["type"] == "entrada"
+    income = working_df[
+        working_df["type"] == "entrada"
     ]["amount"].sum()
 
     total_expenses = expenses["amount"].sum()
@@ -202,31 +237,30 @@ def forecast_month_end_balance():
         income - total_expenses
     )
 
-    if expenses.empty:
+    if working_df.empty:
         return {
-            "current_balance": round(
-                float(current_balance),
-                2
-            ),
+            "current_balance": 0.0,
             "average_daily_expense": 0.0,
             "days_observed": 0,
             "days_remaining": 0,
             "projected_remaining_expenses": 0.0,
-            "projected_month_end_balance": round(
-                float(current_balance),
-                2
-            ),
+            "projected_month_end_balance": 0.0,
         }
 
-    first_date = df["date"].min()
-    last_date = df["date"].max()
+    first_date = working_df["date"].min()
+    last_date = working_df["date"].max()
 
     days_observed = (
         last_date - first_date
     ).days + 1
 
+    if days_observed <= 0:
+        days_observed = 1
+
     average_daily_expense = (
         total_expenses / days_observed
+        if days_observed > 0
+        else 0.0
     )
 
     month_end = (
@@ -234,9 +268,10 @@ def forecast_month_end_balance():
         + pd.offsets.MonthEnd(0)
     )
 
-    days_remaining = (
-        month_end - last_date
-    ).days
+    days_remaining = max(
+        (month_end - last_date).days,
+        0
+    )
 
     projected_remaining_expenses = (
         average_daily_expense
@@ -272,3 +307,82 @@ def forecast_month_end_balance():
             2
         ),
     }
+
+
+# =========================================================
+# DETECÇÃO DE ANOMALIAS
+# =========================================================
+
+def detect_spending_anomalies(
+    df,
+    threshold_multiplier: float = 2.0
+):
+    expenses = df[
+        df["type"] == "saida"
+    ].copy()
+
+    if expenses.empty:
+        return []
+
+    results = []
+
+    grouped = expenses.groupby(
+        [
+            "description",
+            "category"
+        ]
+    )
+
+    for (
+        description,
+        category
+    ), group in grouped:
+
+        if len(group) < 2:
+            continue
+
+        average_amount = (
+            group["amount"].mean()
+        )
+
+        threshold = (
+            average_amount
+            * threshold_multiplier
+        )
+
+        anomalies = group[
+            group["amount"] > threshold
+        ]
+
+        for _, row in anomalies.iterrows():
+
+            results.append(
+                {
+                    "date": str(
+                        row["date"]
+                    ),
+                    "description": description,
+                    "category": category,
+                    "amount": round(
+                        float(row["amount"]),
+                        2
+                    ),
+                    "average_amount": round(
+                        float(average_amount),
+                        2
+                    ),
+                    "threshold": round(
+                        float(threshold),
+                        2
+                    ),
+                    "difference_from_average": round(
+                        float(
+                            row["amount"]
+                            - average_amount
+                        ),
+                        2
+                    ),
+                }
+            )
+
+    return results
