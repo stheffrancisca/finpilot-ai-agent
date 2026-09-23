@@ -68,7 +68,7 @@ REGRAS:
 def run_gemini_agent(
     message,
     tools,
-    max_retries=3
+    max_retries=2
 ):
 
     last_error = None
@@ -108,6 +108,6 @@ def run_gemini_agent(
             )
 
             if attempt < max_retries - 1:
-                time.sleep(2)
+                time.sleep(0.5)
 
     raise last_error
