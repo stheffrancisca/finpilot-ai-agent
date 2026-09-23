@@ -6,6 +6,10 @@ from app.agents.financial_agent import (
     run_financial_agent,
 )
 
+from app.services.audit import (
+    read_audit_log,
+)
+
 from app.tools.financial_metrics import (
     calculate_total_income,
     calculate_total_expenses,
@@ -21,24 +25,22 @@ from app.tools.financial_tools import (
 )
 
 
-# =========================
+# =========================================================
 # CONFIGURAÇÕES
-# =========================
+# =========================================================
 
-DEFAULT_FILEPATH = (
-    "data/sample_transactions.csv"
-)
+DEFAULT_FILEPATH = "data/sample_transactions.csv"
 
 st.set_page_config(
     page_title="FinPilot AI",
     page_icon="💰",
-    layout="wide"
+    layout="wide",
 )
 
 
-# =========================
+# =========================================================
 # FUNÇÕES AUXILIARES
-# =========================
+# =========================================================
 
 def format_brl(value):
     value = float(value)
@@ -80,7 +82,7 @@ def validate_dataframe(df):
                         missing_columns
                     )
                 )
-            )
+            ),
         )
 
     valid_types = {
@@ -112,7 +114,7 @@ def validate_dataframe(df):
                         invalid_types
                     )
                 )
-            )
+            ),
         )
 
     try:
@@ -125,7 +127,7 @@ def validate_dataframe(df):
 
         return (
             False,
-            "A coluna 'amount' deve ser numérica."
+            "A coluna 'amount' deve ser numérica.",
         )
 
     try:
@@ -138,15 +140,93 @@ def validate_dataframe(df):
 
         return (
             False,
-            "A coluna 'date' possui datas inválidas."
+            "A coluna 'date' possui datas inválidas.",
         )
 
     return True, None
 
 
-# =========================
+# =========================================================
+# NOMES AMIGÁVEIS PARA AUDITORIA
+# =========================================================
+
+REASON_LABELS = {
+    "financial_action": (
+        "Tentativa de executar transação financeira"
+    ),
+    "prompt_injection": (
+        "Tentativa de alterar as regras do agente"
+    ),
+    "sensitive_inference": (
+        "Tentativa de inferir informação sensível"
+    ),
+    "unsafe_output": (
+        "Resposta potencialmente insegura"
+    ),
+    "outro": (
+        "Outro comportamento bloqueado"
+    ),
+}
+
+
+EVENT_LABELS = {
+    "input_guardrail": (
+        "Verificação da pergunta"
+    ),
+    "output_guardrail": (
+        "Verificação da resposta"
+    ),
+    "tool_call": (
+        "Ferramenta executada"
+    ),
+    "fast_tool_call": (
+        "Ferramenta executada"
+    ),
+    "agent_response": (
+        "Resposta do agente"
+    ),
+    "agent_error": (
+        "Falha do agente"
+    ),
+}
+
+
+STATUS_LABELS = {
+    "allowed": "Permitido",
+    "blocked": "Bloqueado",
+    "success": "Sucesso",
+    "error": "Erro",
+}
+
+
+TOOL_LABELS = {
+    "get_financial_summary": (
+        "Resumo financeiro"
+    ),
+    "get_expense_by_category": (
+        "Gasto por categoria"
+    ),
+    "get_top_expense_category": (
+        "Maior categoria de gasto"
+    ),
+    "calculate_purchase_impact": (
+        "Análise de impacto da compra"
+    ),
+    "detect_recurring_expenses": (
+        "Detecção de gastos recorrentes"
+    ),
+    "forecast_month_end_balance": (
+        "Projeção de saldo"
+    ),
+    "detect_spending_anomalies": (
+        "Detecção de anomalias"
+    ),
+}
+
+
+# =========================================================
 # SIDEBAR
-# =========================
+# =========================================================
 
 with st.sidebar:
 
@@ -170,7 +250,7 @@ with st.sidebar:
         [
             "Usar extrato fictício",
             "Enviar meu CSV",
-        ]
+        ],
     )
 
     uploaded_file = None
@@ -183,7 +263,7 @@ with st.sidebar:
         uploaded_file = (
             st.file_uploader(
                 "Envie seu extrato",
-                type=["csv"]
+                type=["csv"],
             )
         )
 
@@ -204,9 +284,9 @@ with st.sidebar:
         st.rerun()
 
 
-# =========================
-# CARREGAMENTO
-# =========================
+# =========================================================
+# CARREGAMENTO DOS DADOS
+# =========================================================
 
 if (
     data_source
@@ -254,9 +334,9 @@ else:
         st.stop()
 
 
-# =========================
+# =========================================================
 # VALIDAÇÃO
-# =========================
+# =========================================================
 
 is_valid, validation_error = (
     validate_dataframe(
@@ -278,9 +358,9 @@ if not is_valid:
     st.stop()
 
 
-# =========================
+# =========================================================
 # NORMALIZAÇÃO
-# =========================
+# =========================================================
 
 df = df.copy()
 
@@ -312,9 +392,9 @@ df["category"] = (
 )
 
 
-# =========================
+# =========================================================
 # CÁLCULOS
-# =========================
+# =========================================================
 
 income = (
     calculate_total_income(
@@ -365,9 +445,9 @@ anomalies = (
 )
 
 
-# =========================
+# =========================================================
 # CABEÇALHO
-# =========================
+# =========================================================
 
 st.title(
     "FinPilot AI"
@@ -381,9 +461,9 @@ st.caption(
 st.divider()
 
 
-# =========================
+# =========================================================
 # INDICADORES
-# =========================
+# =========================================================
 
 col1, col2, col3, col4 = (
     st.columns(4)
@@ -431,9 +511,9 @@ with col4:
 st.divider()
 
 
-# =========================
+# =========================================================
 # VISÃO DAS DESPESAS
-# =========================
+# =========================================================
 
 st.subheader(
     "Visão das despesas"
@@ -480,7 +560,7 @@ with chart_col1:
         .encode(
             x=alt.X(
                 "Valor:Q",
-                title="Valor gasto (R$)"
+                title="Valor gasto (R$)",
             ),
             y=alt.Y(
                 "Categoria:N",
@@ -488,20 +568,20 @@ with chart_col1:
                 sort="-x",
                 axis=alt.Axis(
                     labelLimit=140,
-                    labelFontSize=12
-                )
+                    labelFontSize=12,
+                ),
             ),
             tooltip=[
                 alt.Tooltip(
                     "Categoria:N",
-                    title="Categoria"
+                    title="Categoria",
                 ),
                 alt.Tooltip(
                     "Valor:Q",
                     title="Valor",
-                    format=",.2f"
+                    format=",.2f",
                 ),
-            ]
+            ],
         )
         .properties(
             height=270
@@ -510,7 +590,7 @@ with chart_col1:
 
     st.altair_chart(
         bar_chart,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -536,20 +616,20 @@ with chart_col2:
                 title=None,
                 legend=alt.Legend(
                     orient="bottom",
-                    columns=2
-                )
+                    columns=2,
+                ),
             ),
             tooltip=[
                 alt.Tooltip(
                     "Categoria:N",
-                    title="Categoria"
+                    title="Categoria",
                 ),
                 alt.Tooltip(
                     "Valor:Q",
                     title="Valor",
-                    format=",.2f"
+                    format=",.2f",
                 ),
-            ]
+            ],
         )
         .properties(
             height=270
@@ -558,16 +638,16 @@ with chart_col2:
 
     st.altair_chart(
         donut_chart,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
 st.divider()
 
 
-# =========================
+# =========================================================
 # SAFE SPEND
-# =========================
+# =========================================================
 
 st.subheader(
     "Safe Spend"
@@ -582,12 +662,12 @@ purchase = st.number_input(
     "Quanto você pretende gastar?",
     min_value=0.0,
     step=50.0,
-    format="%.2f"
+    format="%.2f",
 )
 
 if st.button(
     "Analisar compra",
-    type="primary"
+    type="primary",
 ):
 
     safe_spend = (
@@ -702,9 +782,9 @@ dentro do limite seguro.
 st.divider()
 
 
-# =========================
-# INSIGHTS
-# =========================
+# =========================================================
+# INSIGHTS FINANCEIROS
+# =========================================================
 
 st.subheader(
     "Insights Financeiros"
@@ -720,6 +800,10 @@ tab1, tab2, tab3 = (
     )
 )
 
+
+# ---------------------------------------------------------
+# GASTOS RECORRENTES
+# ---------------------------------------------------------
 
 with tab1:
 
@@ -775,6 +859,10 @@ with tab1:
         )
 
 
+# ---------------------------------------------------------
+# FORECAST
+# ---------------------------------------------------------
+
 with tab2:
 
     c1, c2, c3 = (
@@ -829,6 +917,10 @@ with tab2:
         f"{format_brl(forecast['projected_remaining_expenses'])}"
     )
 
+
+# ---------------------------------------------------------
+# ANOMALIAS
+# ---------------------------------------------------------
 
 with tab3:
 
@@ -900,9 +992,563 @@ with tab3:
 st.divider()
 
 
-# =========================
+# =========================================================
+# SEGURANÇA & AUDITORIA
+# =========================================================
+
+st.subheader(
+    "Segurança & Auditoria"
+)
+
+st.caption(
+    "Monitoramento dos guardrails, "
+    "ferramentas e decisões do agente."
+)
+
+
+audit_events = (
+    read_audit_log()
+)
+
+
+if audit_events:
+
+    total_events = len(
+        audit_events
+    )
+
+    blocked_events = sum(
+        1
+        for event in audit_events
+        if event.get(
+            "status"
+        ) == "blocked"
+    )
+
+    error_events = sum(
+        1
+        for event in audit_events
+        if event.get(
+            "status"
+        ) == "error"
+    )
+
+    tool_calls = sum(
+        1
+        for event in audit_events
+        if event.get(
+            "event_type"
+        )
+        in (
+            "tool_call",
+            "fast_tool_call",
+        )
+    )
+
+
+    audit_col1, audit_col2, audit_col3, audit_col4 = (
+        st.columns(4)
+    )
+
+
+    with audit_col1:
+
+        st.metric(
+            "Interações monitoradas",
+            total_events
+        )
+
+
+    with audit_col2:
+
+        st.metric(
+            "Ameaças bloqueadas",
+            blocked_events
+        )
+
+
+    with audit_col3:
+
+        st.metric(
+            "Ferramentas acionadas",
+            tool_calls
+        )
+
+
+    with audit_col4:
+
+        st.metric(
+            "Falhas",
+            error_events
+        )
+
+
+    # =====================================================
+    # TABELA DE EVENTOS
+    # =====================================================
+
+    st.markdown(
+        "#### Últimos eventos de segurança"
+    )
+
+
+    last_events = (
+        audit_events[-10:]
+    )
+
+    last_events = list(
+        reversed(
+            last_events
+        )
+    )
+
+
+    audit_rows = []
+
+
+    for event in last_events:
+
+        reason_code = ""
+
+        input_guardrail = (
+            event.get(
+                "input_guardrail"
+            )
+        )
+
+        output_guardrail = (
+            event.get(
+                "output_guardrail"
+            )
+        )
+
+
+        if input_guardrail:
+
+            reason_code = (
+                input_guardrail.get(
+                    "reason"
+                )
+                or ""
+            )
+
+
+        elif output_guardrail:
+
+            reason_code = (
+                output_guardrail.get(
+                    "reason"
+                )
+                or ""
+            )
+
+
+        friendly_reason = (
+            REASON_LABELS.get(
+                reason_code,
+                reason_code
+            )
+            if reason_code
+            else ""
+        )
+
+
+        extra = (
+            event.get(
+                "extra",
+                {}
+            )
+        )
+
+
+        if isinstance(
+            extra,
+            dict
+        ):
+
+            tool_code = (
+                extra.get(
+                    "tool"
+                )
+                or ""
+            )
+
+        else:
+
+            tool_code = ""
+
+
+        friendly_tool = (
+            TOOL_LABELS.get(
+                tool_code,
+                tool_code
+            )
+            if tool_code
+            else ""
+        )
+
+
+        timestamp = (
+            event.get(
+                "timestamp",
+                ""
+            )
+        )
+
+
+        if timestamp:
+
+            try:
+
+                timestamp = (
+                    pd.to_datetime(
+                        timestamp
+                    )
+                    .strftime(
+                        "%d/%m/%Y %H:%M:%S"
+                    )
+                )
+
+            except Exception:
+
+                pass
+
+
+        event_code = (
+            event.get(
+                "event_type",
+                ""
+            )
+        )
+
+        status_code = (
+            event.get(
+                "status",
+                ""
+            )
+        )
+
+
+        audit_rows.append(
+            {
+                "Horário": timestamp,
+
+                "Evento": (
+                    EVENT_LABELS.get(
+                        event_code,
+                        event_code
+                    )
+                ),
+
+                "Status": (
+                    STATUS_LABELS.get(
+                        status_code,
+                        status_code
+                    )
+                ),
+
+                "Motivo do bloqueio": (
+                    friendly_reason
+                ),
+
+                "Ferramenta utilizada": (
+                    friendly_tool
+                ),
+            }
+        )
+
+
+    audit_df = pd.DataFrame(
+        audit_rows
+    )
+
+
+    st.dataframe(
+        audit_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+    # =====================================================
+    # MOTIVOS DOS BLOQUEIOS
+    # =====================================================
+
+    blocked_reasons = {}
+
+
+    for event in audit_events:
+
+        if (
+            event.get(
+                "status"
+            )
+            != "blocked"
+        ):
+            continue
+
+
+        input_guardrail = (
+            event.get(
+                "input_guardrail"
+            )
+        )
+
+        output_guardrail = (
+            event.get(
+                "output_guardrail"
+            )
+        )
+
+
+        reason_code = None
+
+
+        if input_guardrail:
+
+            reason_code = (
+                input_guardrail.get(
+                    "reason"
+                )
+            )
+
+
+        elif output_guardrail:
+
+            reason_code = (
+                output_guardrail.get(
+                    "reason"
+                )
+            )
+
+
+        if not reason_code:
+
+            reason_code = "outro"
+
+
+        friendly_reason = (
+            REASON_LABELS.get(
+                reason_code,
+                reason_code
+            )
+        )
+
+
+        blocked_reasons[
+            friendly_reason
+        ] = (
+            blocked_reasons.get(
+                friendly_reason,
+                0
+            )
+            + 1
+        )
+
+
+    if blocked_reasons:
+
+        st.markdown(
+            "#### Ameaças bloqueadas pelos Guardrails"
+        )
+
+        st.caption(
+            "O gráfico mostra quais tipos de "
+            "solicitações foram impedidos antes "
+            "de comprometer a segurança do agente."
+        )
+
+
+        blocked_df = pd.DataFrame(
+            [
+                {
+                    "Motivo": reason,
+                    "Quantidade": quantity,
+                }
+                for reason, quantity
+                in blocked_reasons.items()
+            ]
+        )
+
+
+        blocked_df = (
+            blocked_df
+            .sort_values(
+                by="Quantidade",
+                ascending=False
+            )
+        )
+
+
+        bars = (
+            alt.Chart(
+                blocked_df
+            )
+            .mark_bar(
+                cornerRadiusEnd=6,
+                size=30,
+            )
+            .encode(
+
+                x=alt.X(
+                    "Quantidade:Q",
+                    title="Quantidade de bloqueios",
+                    axis=alt.Axis(
+                        tickMinStep=1,
+                        grid=False,
+                    ),
+                ),
+
+                y=alt.Y(
+                    "Motivo:N",
+                    title=None,
+                    sort="-x",
+                    axis=alt.Axis(
+                        labelFontSize=13,
+                        labelLimit=350,
+                    ),
+                ),
+
+                tooltip=[
+                    alt.Tooltip(
+                        "Motivo:N",
+                        title="Motivo",
+                    ),
+                    alt.Tooltip(
+                        "Quantidade:Q",
+                        title="Bloqueios",
+                        format=".0f",
+                    ),
+                ],
+            )
+        )
+
+
+        labels = (
+            alt.Chart(
+                blocked_df
+            )
+            .mark_text(
+                align="left",
+                baseline="middle",
+                dx=8,
+                fontSize=13,
+                fontWeight="bold",
+            )
+            .encode(
+
+                x=alt.X(
+                    "Quantidade:Q"
+                ),
+
+                y=alt.Y(
+                    "Motivo:N",
+                    sort="-x",
+                ),
+
+                text=alt.Text(
+                    "Quantidade:Q",
+                    format=".0f",
+                ),
+            )
+        )
+
+
+        security_chart = (
+            bars
+            + labels
+        ).properties(
+            height=max(
+                150,
+                len(
+                    blocked_df
+                ) * 55
+            )
+        )
+
+
+        st.altair_chart(
+            security_chart,
+            use_container_width=True,
+        )
+
+
+        # =================================================
+        # EXPLICAÇÃO DOS BLOQUEIOS
+        # =================================================
+
+        st.markdown(
+            "#### O que cada bloqueio significa?"
+        )
+
+
+        if (
+            "Tentativa de executar transação financeira"
+            in blocked_reasons
+        ):
+
+            st.warning(
+                "**Ação financeira:** "
+                "o usuário tentou solicitar PIX, "
+                "transferência ou pagamento. "
+                "O FinPilot pode analisar o impacto, "
+                "mas não executa a operação."
+            )
+
+
+        if (
+            "Tentativa de alterar as regras do agente"
+            in blocked_reasons
+        ):
+
+            st.warning(
+                "**Tentativa de alterar as regras:** "
+                "foi identificado um pedido para ignorar "
+                "instruções, revelar o prompt ou contornar "
+                "as proteções do agente."
+            )
+
+
+        if (
+            "Tentativa de inferir informação sensível"
+            in blocked_reasons
+        ):
+
+            st.warning(
+                "**Inferência sensível:** "
+                "o usuário tentou obter conclusões sobre "
+                "saúde, religião, orientação ou posição "
+                "política a partir de dados financeiros."
+            )
+
+
+        if (
+            "Resposta potencialmente insegura"
+            in blocked_reasons
+        ):
+
+            st.warning(
+                "**Resposta insegura:** "
+                "o guardrail de saída detectou que a resposta "
+                "poderia indicar uma ação que o FinPilot "
+                "não está autorizado a executar."
+            )
+
+
+else:
+
+    st.info(
+        "Nenhum evento de auditoria "
+        "foi registrado ainda."
+    )
+
+
+st.divider()
+
+
+# =========================================================
 # CHAT
-# =========================
+# =========================================================
 
 st.subheader(
     "FinPilot AI Assistant"
@@ -961,6 +1607,7 @@ if user_question:
             user_question
         )
 
+
     with st.chat_message(
         "assistant"
     ):
@@ -988,6 +1635,7 @@ if user_question:
                         "content": response,
                     }
                 )
+
 
             except Exception as error:
 
