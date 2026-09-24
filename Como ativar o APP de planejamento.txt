@@ -1,0 +1,12 @@
+Como ativar o APP de planejamento 
+
+.\.venv\Scripts\Activate.ps1
+
+
+* Atualize as dependências:
+
+python -m pip install -r requirements.txt
+
+
+* Ativar 
+python -m streamlit run streamlit_app.py
